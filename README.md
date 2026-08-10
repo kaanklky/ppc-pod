@@ -6,7 +6,7 @@
 
 An AirPlay 1 receiver with a native Cocoa GUI, built to run on a real PowerPC Mac (developed and tested against a 700MHz iMac G4 running Mac OS X 10.5 Leopard). Advertises itself over Bonjour (`_raop._tcp`), accepts a real AirPlay 1 RTSP/RTP session (RSA-OAEP session key recovery, AES-CBC decrypt, ALAC decode), and plays audio via CoreAudio. Now-playing metadata (title/artist/album, cover art) and connection status are shown in a small window; the device name shown there and advertised over Bonjour defaults to the Mac's own hostname on first launch and can be edited and saved.
 
-<p align="center"><img src="screenshot.png" alt="PowerPC Pod screenshot"></p>
+<p align="center"><img src="resources/screenshot.png" alt="PowerPC Pod screenshot"></p>
 
 ## Requirements to build
 
@@ -118,6 +118,8 @@ docker/                         cross-compile toolchain (Dockerfile, ppc-cc wrap
                                 make_app_bundle.sh, make_icns.sh)
 resources/icon_sources/         icon artwork at every needed size
 resources/AppIcon.icns          app icon
+resources/Info.plist            app bundle metadata, copied verbatim by make_app_bundle.sh
+resources/screenshot.png        README screenshot
 sdk/                            the Mac OS X 10.5 SDK - gitignored, see "Getting the SDK"
 vendor/                         mbedtls (source + prebuilt PowerPC libs) - gitignored,
                                 see "Getting the vendored dependencies"
