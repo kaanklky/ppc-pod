@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -369,6 +370,28 @@ static int open_udp_socket(unsigned short *out_port)
         close(fd);
         return -1;
     }
+
+    /* Real bug this fixes: UDP has no connection-closed signal like TCP -
+     * a plain blocking recv() on this socket (airplay_rtp.c's rtp_thread_
+     * main) would wait forever once the sender stops sending packets,
+     * which is exactly what happens on every normal disconnect. That
+     * thread's own loop already correctly re-checks sess->recording after
+     * every recv() call and handles a timeout as a harmless retry - the
+     * only missing piece was recv() itself never timing out at all, so it
+     * never got the chance to notice sess->recording had been cleared.
+     * Without this, airplay_rtp_stop()'s pthread_join() on that thread
+     * blocked forever too, freezing the single accept() loop that
+     * services every incoming AirPlay connection - a device disconnecting
+     * permanently wedged the receiver until the app was force-quit. A 1s
+     * timeout is frequent enough to notice a stop request promptly without
+     * meaningfully affecting real packet reception. */
+    {
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    }
+
     *out_port = ntohs(addr.sin_port);
     return fd;
 }
