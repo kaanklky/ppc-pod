@@ -13,6 +13,7 @@ vendor/
 *.app/
 ppc_pod_ppc
 *_ppc
+*.zip
 
 # Local runtime state (device name, cached cover art) - never something to
 # version, and no longer even lives under the repo (see app_settings.c -
