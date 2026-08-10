@@ -36,35 +36,10 @@ else
   echo "Warning: $PROJECT_DIR/resources/AppIcon.icns not found - app will use the generic Finder icon" >&2
 fi
 
-cat > "$APP_DIR/Contents/Info.plist" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>PowerPCPod</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.ppcpod.gui</string>
-    <key>CFBundleName</key>
-    <string>PowerPC Pod</string>
-    <key>CFBundleDisplayName</key>
-    <string>PowerPC Pod</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>10.5</string>
-    <key>NSHighResolutionCapable</key>
-    <false/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Kaan Kölköy</string>
-</dict>
-</plist>
-EOF
+if [ ! -f "$PROJECT_DIR/resources/Info.plist" ]; then
+  echo "Missing $PROJECT_DIR/resources/Info.plist" >&2
+  exit 1
+fi
+cp "$PROJECT_DIR/resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 
 echo "Built $APP_DIR"
