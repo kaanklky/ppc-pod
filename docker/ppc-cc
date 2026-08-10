@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+IMAGE_NAME=ppc-pod-toolchain
+TOOL="${PPC_TOOL:-powerpc-apple-darwin9-gcc}"
+
+docker run --rm \
+  -v "$PROJECT_DIR:/src" \
+  -w /src \
+  "$IMAGE_NAME" \
+  "/opt/osxcross/target/bin/$TOOL" "$@"

@@ -1,0 +1,23 @@
+# Apple's Mac OS X SDK - proprietary, extracted from a licensed Xcode
+# install. Extract it from a real Xcode 3.1.4 install on a
+# Leopard machine (see README.md) rather than versioning it.
+sdk/
+
+# Third-party source + prebuilt libraries. mbedtls-src is a git clone with
+# its own license and history; the prebuilt PowerPC .a files under
+# vendor/mbedtls/lib-ppc are reproducible build output (see README.md's
+# "Rebuilding mbedtls for PowerPC" section).
+vendor/
+
+# Build outputs
+*.app/
+ppc_pod_ppc
+*_ppc
+
+# Local runtime state (device name, cached cover art) - never something to
+# version, and no longer even lives under the repo (see app_settings.c -
+# it's under ~/Library/Application Support/PowerPC Pod/ on the target Mac).
+state/
+
+# Editor/OS cruft
+.DS_Store
