@@ -69,7 +69,7 @@ Then copy the resulting `.a` files into `vendor/mbedtls/lib-ppc/`.
 ```
 ./docker/ppc-cc -Os -ffunction-sections -fdata-sections -Wl,-dead_strip \
   -I vendor/mbedtls-src/include -I src \
-  src/ppc_pod_gui_main.m src/cocoa_ui.m src/login_items.m \
+  src/ppc_pod_gui_main.m src/cocoa_ui.m \
   src/airplay_main.c \
   src/airplay_dmap.c src/airplay_rtsp.c src/airplay_rtp.c src/airplay_rsa.c src/airplay_session.c src/alac.c \
   src/app_state.c src/app_settings.c \
@@ -85,7 +85,7 @@ file "PowerPC Pod.app/Contents/MacOS/PowerPCPod"   # confirm: Mach-O ppc executa
 scp -r "PowerPC Pod.app" your-ppc-mac:/Applications/
 ```
 
-Once copied to `/Applications`, it's a normal double-click-to-run app - no separate install or pairing step. It registers itself as a Login Item on first launch so it starts automatically on login.
+Once copied to `/Applications`, it's a normal double-click-to-run app - no separate install or pairing step. It does not register itself as a Login Item automatically - if you want it to start on login, add it yourself via System Preferences.
 
 ## Changing the app icon
 
@@ -112,7 +112,6 @@ src/                            all source (Objective-C + C)
   coreaudio_output.c/.h         CoreAudio playback
   app_state.c/.h                shared state between the backend thread and the UI
   app_settings.c/.h             device name persistence (settings.txt) + hostname default
-  login_items.m/.h              Login Items registration
   mdns.c/.h                     Bonjour/mDNS responder
 docker/                         cross-compile toolchain (Dockerfile, ppc-cc wrapper,
                                 make_app_bundle.sh, make_icns.sh)

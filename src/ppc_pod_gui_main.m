@@ -6,7 +6,6 @@
 #include "app_state.h"
 #include "app_settings.h"
 #include "cocoa_ui.h"
-#include "login_items.h"
 
 #define PPC_POD_BIG_STACK_BYTES (4 * 1024 * 1024)
 
@@ -56,8 +55,11 @@ int main(int argc, char **argv)
      * learns the device name. */
     spawn_detached(airplay_backend_thread_main, device_name);
 
-    register_self_as_login_item();
-
+    /* No automatic Login Item registration - this app never adds itself to
+     * a user's login items without being asked. If someone wants it to
+     * start automatically, that's their call to make explicitly via
+     * System Preferences / System Settings, not something this app decides
+     * on their behalf. */
     cocoa_ui_run(); /* blocks - Cocoa's run loop owns this thread until the window closes */
 
     return 0;

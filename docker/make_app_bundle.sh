@@ -1,11 +1,10 @@
 #!/bin/bash
 set -e
 
-# Assembles the real .app bundle structure LSSharedFileListInsertItemURL/
-# NSBundle mainBundle need (see src/login_items.m, src/cocoa_ui.m) around
-# the already cross-compiled binary - a bare Mach-O executable has no
-# bundle identity at all, so Login Items registration, window/Dock
-# integration, and the Finder icon would not behave correctly without
+# Assembles the real .app bundle structure NSBundle mainBundle needs
+# (see src/cocoa_ui.m) around the already cross-compiled binary - a bare
+# Mach-O executable has no bundle identity at all, so window/Dock
+# integration and the Finder icon would not behave correctly without
 # this.
 #
 # Usage: docker/make_app_bundle.sh <path-to-compiled-ppc-binary> [output-dir]
