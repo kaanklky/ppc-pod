@@ -19,7 +19,7 @@
     <key>CFBundleVersion</key>
     <string>5</string>
     <key>LSMinimumSystemVersion</key>
-    <string>10.4</string>
+    <string>10.2</string>
     <key>NSHighResolutionCapable</key>
     <false/>
     <key>NSHumanReadableCopyright</key>
