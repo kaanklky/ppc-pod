@@ -40,6 +40,56 @@
 - (NSImage *)image;
 @end
 
+/* NSBezierPath's +bezierPathWithRoundedRect:xRadius:yRadius: convenience
+ * constructor doesn't exist before 10.5 - this is the same four-arc
+ * construction AppKit itself used internally pre-Leopard, built from
+ * +appendBezierPathWithArcWithCenter:radius:startAngle:endAngle:, which has
+ * been part of NSBezierPath since 10.0, so it draws identically on every
+ * target OS version. */
+static NSBezierPath *PPCRoundedRectPath(NSRect rect, CGFloat radius)
+{
+    NSBezierPath *path = [NSBezierPath bezierPath];
+    NSRect innerRect = NSInsetRect(rect, radius, radius);
+    [path appendBezierPathWithArcWithCenter:NSMakePoint(NSMinX(innerRect), NSMinY(innerRect)) radius:radius startAngle:180.0f endAngle:270.0f];
+    [path appendBezierPathWithArcWithCenter:NSMakePoint(NSMaxX(innerRect), NSMinY(innerRect)) radius:radius startAngle:270.0f endAngle:360.0f];
+    [path appendBezierPathWithArcWithCenter:NSMakePoint(NSMaxX(innerRect), NSMaxY(innerRect)) radius:radius startAngle:0.0f endAngle:90.0f];
+    [path appendBezierPathWithArcWithCenter:NSMakePoint(NSMinX(innerRect), NSMaxY(innerRect)) radius:radius startAngle:90.0f endAngle:180.0f];
+    [path closePath];
+    return path;
+}
+
+/* NSGradient doesn't exist before 10.5 either - this hand-rolled banding
+ * approximates the same linear alpha fade (dark at the outer edge, fading
+ * to transparent over shadowDepth) by stacking thin translucent strips,
+ * which is exactly what NSGradient itself does under the hood anyway. */
+static void PPCDrawFadeBand(NSRect rect, BOOL vertical, BOOL fadeFromMaxEdge)
+{
+    const NSInteger steps = 8;
+    const CGFloat startAlpha = 0.35f;
+    NSInteger i;
+
+    for (i = 0; i < steps; i++) {
+        CGFloat t = (CGFloat)i / (CGFloat)steps;
+        CGFloat alpha = startAlpha * (1.0f - t);
+        NSRect strip;
+
+        if (vertical) {
+            CGFloat stripHeight = rect.size.height / steps;
+            CGFloat y = fadeFromMaxEdge ? (rect.origin.y + rect.size.height - (i + 1) * stripHeight)
+                                         : (rect.origin.y + i * stripHeight);
+            strip = NSMakeRect(rect.origin.x, y, rect.size.width, stripHeight);
+        } else {
+            CGFloat stripWidth = rect.size.width / steps;
+            CGFloat x = fadeFromMaxEdge ? (rect.origin.x + rect.size.width - (i + 1) * stripWidth)
+                                         : (rect.origin.x + i * stripWidth);
+            strip = NSMakeRect(x, rect.origin.y, stripWidth, rect.size.height);
+        }
+
+        [[NSColor colorWithCalibratedWhite:0.0 alpha:alpha] set];
+        NSRectFillUsingOperation(strip, NSCompositeSourceOver);
+    }
+}
+
 @implementation PPCArtView
 
 - (void)setImage:(NSImage *)img
@@ -64,7 +114,7 @@
 {
     NSRect bounds = [self bounds];
     CGFloat radius = 8.0f;
-    NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:bounds xRadius:radius yRadius:radius];
+    NSBezierPath *path = PPCRoundedRectPath(bounds, radius);
 
     [[NSColor colorWithCalibratedWhite:0.82 alpha:1.0] set];
     [path fill];
@@ -95,8 +145,6 @@
      * physical recess rather than a flat sticker. */
     {
         CGFloat shadowDepth = 8.0f;
-        NSGradient *shadow = [[NSGradient alloc] initWithStartingColor:[NSColor colorWithCalibratedWhite:0.0 alpha:0.35]
-                                                             endingColor:[NSColor colorWithCalibratedWhite:0.0 alpha:0.0]];
         NSRect topRect = NSMakeRect(bounds.origin.x, bounds.origin.y + bounds.size.height - shadowDepth,
                                      bounds.size.width, shadowDepth);
         NSRect bottomRect = NSMakeRect(bounds.origin.x, bounds.origin.y,
@@ -105,11 +153,10 @@
                                       shadowDepth, bounds.size.height);
         NSRect rightRect = NSMakeRect(bounds.origin.x + bounds.size.width - shadowDepth, bounds.origin.y,
                                        shadowDepth, bounds.size.height);
-        [shadow drawInRect:topRect angle:270.0f];
-        [shadow drawInRect:bottomRect angle:90.0f];
-        [shadow drawInRect:leftRect angle:0.0f];
-        [shadow drawInRect:rightRect angle:180.0f];
-        [shadow release];
+        PPCDrawFadeBand(topRect, YES, YES);
+        PPCDrawFadeBand(bottomRect, YES, NO);
+        PPCDrawFadeBand(leftRect, NO, NO);
+        PPCDrawFadeBand(rightRect, NO, YES);
     }
 
     [NSGraphicsContext restoreGraphicsState];
