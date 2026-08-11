@@ -66,8 +66,15 @@ Then copy the resulting `.a` files into `vendor/mbedtls/lib-ppc/`.
 
 ## Building and deploying the app
 
+`-mlong-double-64` is required, not optional: without it, GCC links every variadic
+libc call (`fprintf`, `snprintf`, etc.) against the `$LDBL128`-suffixed symbol
+variant that only exists starting with the later `long double` ABI - Mac OS X
+10.2 Jaguar's libSystem doesn't have it and refuses to even launch the binary.
+This flag makes GCC emit the plain legacy symbol names instead, which exist on
+every target OS version, confirmed via a real dyld error before adding it.
+
 ```
-./docker/ppc-cc -Os -ffunction-sections -fdata-sections -Wl,-dead_strip \
+./docker/ppc-cc -Os -mlong-double-64 -ffunction-sections -fdata-sections -Wl,-dead_strip \
   -I vendor/mbedtls-src/include -I src \
   src/ppc_pod_gui_main.m src/cocoa_ui.m \
   src/airplay_main.c \
