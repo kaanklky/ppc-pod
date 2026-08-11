@@ -75,7 +75,7 @@ Then copy the resulting `.a` files into `vendor/mbedtls/lib-ppc/`.
   src/app_state.c src/app_settings.c \
   src/mdns.c src/coreaudio_output.c \
   vendor/mbedtls/lib-ppc/libmbedtls.a vendor/mbedtls/lib-ppc/libmbedx509.a vendor/mbedtls/lib-ppc/libmbedcrypto.a \
-  -framework Cocoa -framework Foundation -framework CoreServices -framework AudioToolbox -framework CoreFoundation \
+  -framework Cocoa -framework Foundation -framework CoreServices -framework AudioToolbox -framework CoreAudio -framework CoreFoundation \
   -o ppc_pod_ppc
 
 ./docker/make_app_bundle.sh ppc_pod_ppc .

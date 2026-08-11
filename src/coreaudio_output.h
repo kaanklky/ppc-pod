@@ -4,7 +4,12 @@
 #include <stddef.h>
 
 /*
- * Mac OS X 10.5 audio output via AudioQueue (AudioToolbox.framework).
+ * Real audio output, with two backends chosen automatically at runtime
+ * depending on which OS actually loaded the binary: AudioQueue
+ * (AudioToolbox.framework) on Mac OS X 10.5+, since that API doesn't exist
+ * before Leopard, and the older AudioDeviceAddIOProc HAL device API
+ * (CoreAudio.framework) as a fallback that works back to 10.0. Callers
+ * don't need to know or care which one is actually in use.
  */
 
 typedef struct coreaudio_output coreaudio_output;
