@@ -19,6 +19,25 @@
 
 #include "mbedtls/base64.h"
 
+/* strcasestr() is a BSD/GNU extension that doesn't exist in Mac OS X 10.2
+ * Jaguar's libc (confirmed via a real dyld "undefined reference" error at
+ * launch, not guessed) - this is the same case-insensitive substring search,
+ * built only from strncasecmp/strlen, both of which are plain POSIX and
+ * present on every target OS version. */
+static const char *ppc_pod_strcasestr(const char *haystack, const char *needle)
+{
+    size_t needle_len = strlen(needle);
+    const char *p;
+
+    if (needle_len == 0) return haystack;
+
+    for (p = haystack; *p != '\0'; p++) {
+        if (strncasecmp(p, needle, needle_len) == 0) return p;
+    }
+
+    return NULL;
+}
+
 static int read_line(int fd, char *out, size_t out_cap)
 {
     size_t n = 0;
@@ -553,7 +572,7 @@ void airplay_rtsp_serve_connection(int conn_fd, unsigned int server_ipv4_be,
                 /* The Content-Type subtype isn't reliably jpeg/png, only
                  * the "image" prefix is trustworthy - sniff by substring
                  * for the cache file's extension, defaulting to .jpg. */
-                const char *ext = (strcasestr(ct, "png") != NULL) ? "png" : "jpg";
+                const char *ext = (ppc_pod_strcasestr(ct, "png") != NULL) ? "png" : "jpg";
                 char path[512];
                 FILE *f;
                 airplay_cover_art_path(path, sizeof(path), ext);
