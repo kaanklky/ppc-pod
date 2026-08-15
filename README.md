@@ -94,6 +94,53 @@ scp -r "PowerPC Pod.app" your-ppc-mac:/Applications/
 
 Once copied to `/Applications`, it's a normal double-click-to-run app - no separate install or pairing step. It does not register itself as a Login Item automatically - if you want it to start on login, add it yourself via System Preferences.
 
+## Building for Intel (x86_64, Mac OS X 10.9 Mavericks+)
+
+The same `ppc-pod-toolchain` Docker image already contains a full `x86_64-apple-darwin9` toolchain against the same 10.5 SDK (osxcross builds every architecture the SDK supports by default) - no separate SDK or Docker image needed. A few real differences from the PowerPC build, each hit and fixed during actual Mavericks-under-QEMU testing rather than guessed at:
+
+- **Toolchain is Clang, not GCC.** Apple's real PowerPC toolchain was GCC-based, but osxcross only builds a GCC front end for the `powerpc*` targets; `x86_64-apple-darwin9` only has Clang (`x86_64-apple-darwin9-clang`). Link with the `o64-clang` wrapper, not the plain target-triple binary directly - plain `x86_64-apple-darwin9-clang` picks up the host's native GNU `ld` instead of the bundled Mach-O `ld`, producing `unrecognised emulation mode: acosx_version_min` errors. Even `o64-clang` alone wasn't enough in practice; pass `-B/opt/osxcross/target/bin -fuse-ld=/opt/osxcross/target/bin/x86_64-apple-darwin9-ld` explicitly to force the correct linker.
+- **No `-mlong-double-64` needed or valid.** That flag exists specifically for PowerPC's historical `long double` ABI split (see above) - x86_64 doesn't have an equivalent split, so omit it entirely for this target.
+- **mbedtls needs `MBEDTLS_NO_UDBL_DIVISION`.** Without it, `bignum.c`'s 128-bit division fast path (`mbedtls_t_udbl` via `__attribute__((mode(TI)))`) references `__udivti3`, a compiler-runtime builtin this toolchain doesn't ship for this target (no `libclang_rt`/`compiler-rt` built for `x86_64-apple-darwin9` here, unlike the real GCC-built `libgcc.a` the PowerPC target has). Defining this macro falls back to mbedtls's portable division implementation instead, avoiding the missing symbol entirely.
+- **`vendor/mbedtls-src` needs a `3rdparty/Makefile.inc` stub.** This checkout's `library/Makefile` unconditionally `include`s `../3rdparty/Makefile.inc` (used for optional alt-crypto backends like Everest), but that directory was never present in this checkout at all, for either architecture - create it yourself with just `THIRDPARTY_INCLUDES=` and `THIRDPARTY_CRYPTO_OBJECTS=` (both empty) before building for any target. Also build only the `libmbedcrypto.a 
+libmbedx509.a libmbedtls.a` targets directly (not the default `static` target, nor `make clean` first) - both of those additionally try `cd ../tests && echo ... > seedfile`, which fails the same way since `../tests` doesn't exist either; the real `.a` files are already correct prerequisites of `static` and build fine on their own.
+
+```
+# One-time: rebuild mbedtls for x86_64 (same vendor/mbedtls-src checkout as PowerPC, different target)
+mkdir -p vendor/mbedtls/lib-x64
+docker run --rm -v "$(pwd)":/src ppc-pod-toolchain bash -c '
+  cd /src/vendor/mbedtls-src/library && \
+  make libmbedcrypto.a libmbedx509.a libmbedtls.a \
+       CC=/opt/osxcross/target/bin/x86_64-apple-darwin9-clang \
+       AR=/opt/osxcross/target/bin/x86_64-apple-darwin9-ar \
+       RL=/opt/osxcross/target/bin/x86_64-apple-darwin9-ranlib \
+       CFLAGS="-DMBEDTLS_NO_UDBL_DIVISION" \
+       APPLE_BUILD=1
+'
+cp vendor/mbedtls-src/library/libmbedcrypto.a vendor/mbedtls-src/library/libmbedx509.a vendor/mbedtls-src/library/libmbedtls.a vendor/mbedtls/lib-x64/
+
+# App build - same source files as the PowerPC build, different compiler/libs
+docker run --rm -v "$(pwd)":/src -w /src ppc-pod-toolchain bash -c '
+  /opt/osxcross/target/bin/o64-clang -Os -B/opt/osxcross/target/bin \
+    -fuse-ld=/opt/osxcross/target/bin/x86_64-apple-darwin9-ld \
+    -ffunction-sections -fdata-sections -Wl,-dead_strip \
+    -I vendor/mbedtls-src/include -I src \
+    src/ppc_pod_gui_main.m src/cocoa_ui.m \
+    src/airplay_main.c \
+    src/airplay_dmap.c src/airplay_rtsp.c src/airplay_rtp.c src/airplay_rsa.c src/airplay_session.c src/alac.c \
+    src/app_state.c src/app_settings.c \
+    src/mdns.c src/coreaudio_output.c \
+    vendor/mbedtls/lib-x64/libmbedtls.a vendor/mbedtls/lib-x64/libmbedx509.a vendor/mbedtls/lib-x64/libmbedcrypto.a \
+    -framework Cocoa -framework Foundation -framework CoreServices -framework AudioToolbox -framework CoreAudio -framework CoreFoundation \
+    -o ppc_pod_x64
+'
+
+./docker/make_app_bundle.sh ppc_pod_x64 .
+
+file "PowerPC Pod.app/Contents/MacOS/PowerPCPod"   # confirm: Mach-O 64-bit x86_64 executable
+```
+
+Tested end to end under QEMU/KVM (`q35` machine, OpenCore 0.6.7 bootloader, `-cpu Penryn`) against a real Mac OS X 10.9.5 Mavericks install: app launches, AirPlay advertises and accepts connections, and networking works over a bridged NIC. Audio output was not yet confirmed working in this VM setup at time of writing (`AppleALC`/`Lilu` load and patch correctly, but the specific codec layout-id QEMU's emulated HDA codec needs wasn't pinned down) - untested whether this is a QEMU-emulated-codec-specific gap or would also affect real Intel Mac hardware.
+
 ## Changing the app icon
 
 `resources/AppIcon.icns` is already built and included. To use a different icon, replace the PNGs in `resources/icon_sources/` (16/32/48/128/256/512px) and run:
@@ -127,6 +174,7 @@ resources/AppIcon.icns          app icon
 resources/Info.plist            app bundle metadata, copied verbatim by make_app_bundle.sh
 resources/screenshot.png        README screenshot
 sdk/                            the Mac OS X 10.5 SDK - gitignored, see "Getting the SDK"
-vendor/                         mbedtls (source + prebuilt PowerPC libs) - gitignored,
-                                see "Getting the vendored dependencies"
+vendor/                         mbedtls (source + prebuilt libs per architecture) - gitignored,
+                                see "Getting the vendored dependencies"; lib-ppc/ for PowerPC,
+                                lib-x64/ for Intel (see "Building for Intel")
 ```
