@@ -139,7 +139,10 @@ docker run --rm -v "$(pwd)":/src -w /src ppc-pod-toolchain bash -c '
 file "PowerPC Pod.app/Contents/MacOS/PowerPCPod"   # confirm: Mach-O 64-bit x86_64 executable
 ```
 
-Tested end to end under QEMU/KVM (`q35` machine, OpenCore 0.6.7 bootloader, `-cpu Penryn`) against a real Mac OS X 10.9.5 Mavericks install: app launches, AirPlay advertises and accepts connections, and networking works over a bridged NIC. Audio output was not yet confirmed working in this VM setup at time of writing (`AppleALC`/`Lilu` load and patch correctly, but the specific codec layout-id QEMU's emulated HDA codec needs wasn't pinned down) - untested whether this is a QEMU-emulated-codec-specific gap or would also affect real Intel Mac hardware.
+Tested two ways:
+
+- **Under QEMU/KVM** (`q35` machine, OpenCore 0.6.7 bootloader, `-cpu Penryn`) against a real Mac OS X 10.9.5 Mavericks install: app launches, AirPlay advertises and accepts connections, and networking works over a bridged NIC. Audio output was not confirmed working in this VM setup (`AppleALC`/`Lilu` load and patch correctly, but the specific codec layout-id QEMU's emulated HDA codec needs wasn't pinned down) - left unresolved whether that's a QEMU-emulated-codec-specific gap or would also affect real Intel Mac hardware.
+- **On real hardware**: a MacBook Air (M1) running macOS 26.5, via Rosetta 2 (this build is x86_64-only, no native arm64 slice - Rosetta translates it transparently). Confirmed working end to end, audio included - the same binary that boots a Mavericks installer from 2014 under emulation also runs cleanly on Apple Silicon eleven years and several CPU architecture generations later.
 
 ## Changing the app icon
 
