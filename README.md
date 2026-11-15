@@ -94,15 +94,41 @@ scp -r "PowerPC Pod.app" your-ppc-mac:/Applications/
 
 Once copied to `/Applications`, it's a normal double-click-to-run app - no separate install or pairing step. It does not register itself as a Login Item automatically - if you want it to start on login, add it yourself via System Preferences.
 
+## Settings file
+
+The app keeps its settings in a plain `key=value` text file at `~/Library/Application Support/PowerPC Pod/settings.txt`. It is read once at startup, so changes need an app restart to take effect. On every startup the app makes sure the three `shutdown_*` keys below exist: if the file is missing it is created with their defaults, and if it exists, only the keys that are missing are appended at the end with their defaults. Lines that are already there (known or unknown keys, comments, order, formatting) are never changed.
+
+```
+shutdown_listener=off
+shutdown_port=8990
+shutdown_key=wololo
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `device_name` | the Mac's hostname (without `.local`) | Name shown in the window and advertised over Bonjour. The line is only written once a name has been saved with the Save button; until then the hostname is used. |
+| `shutdown_listener` | `off` | `on` starts the remote shutdown listener, `off` does not start it at all. |
+| `shutdown_port` | `8990` | TCP port of the shutdown listener (1-65535). |
+| `shutdown_key` | `wololo` | Key a request must carry to be accepted. An empty value (`shutdown_key=`) turns the check off. |
+
+A missing line keeps its default, an unparseable `shutdown_listener` or `shutdown_port` value falls back to its default (the bad line itself is left in the file for you to fix), and an explicitly empty `shutdown_key=` stays empty. The Save button only replaces (or adds) the `device_name` line, and removes it when the name is empty; every other line stays exactly as it is.
+
 ## Remote shutdown endpoint
 
-The app runs one extra HTTP listener on TCP port 8990 (all interfaces). Any `GET` request, to any path, makes the Mac shut down gracefully - it sends the same `shut` Apple Event to the system process (loginwindow) that Apple menu > Shut Down does, so running apps are asked to quit normally. It uses only CoreServices, which is already linked, so no extra library or framework is needed. Any non-`GET` request gets a `405` and does nothing.
+When `shutdown_listener=on`, the app runs one extra HTTP listener on `shutdown_port` (all interfaces). A `GET` request that carries the right key makes the Mac shut down gracefully - it sends the same `shut` Apple Event to the system process (loginwindow) that Apple menu > Shut Down does, so running apps are asked to quit normally. It uses only CoreServices, which is already linked, so no extra library or framework is needed.
+
+The key goes in the `nana` query parameter, the path itself does not matter:
 
 ```
-curl http://<mac-ip>:8990/
+curl "http://<mac-ip>:8990/?nana=wololo"
 ```
 
-There is deliberately no authentication, token or path check: anyone who can reach port 8990 can shut the Mac down (a browser requesting `/favicon.ico` counts as a `GET` too, which is why only the first `GET` in any 30 second window actually sends the shutdown event - later ones still get a `200` but are ignored, so one browser visit does not trigger two shutdown requests). Only run this on a trusted network. If the port is already in use the listener logs `shutdown: failed to listen` to stderr and the rest of the app keeps working without it.
+- Right key (or `shutdown_key=` empty, which turns the check off): `200` and the shutdown starts.
+- Missing or wrong key: `403`, nothing happens (so a browser's `/favicon.ico` request is rejected too).
+- Any non-`GET` request: `405`, nothing happens.
+- Only the first accepted `GET` in any 30 second window sends the shutdown event; later ones still get a `200` but are ignored, so one browser visit does not trigger two shutdown requests.
+
+The key is sent in plain text over plain HTTP and is only a shared secret, not real security: anyone who can sniff your network or reach the port and guess the key can shut the Mac down. Only run this on a trusted network, and change the default `wololo`. If the port is already in use the listener logs `shutdown: failed to listen` to stderr and the rest of the app keeps working without it.
 
 ## Building for Intel (x86_64, Mac OS X 10.9 Mavericks+)
 
@@ -178,8 +204,8 @@ src/                            all source (Objective-C + C)
   alac.c/.h                     Apple Lossless decoder
   coreaudio_output.c/.h         CoreAudio playback
   app_state.c/.h                shared state between the backend thread and the UI
-  app_settings.c/.h             device name persistence (settings.txt) + hostname default
-  shutdown_listener.c/.h        HTTP listener on port 8990, GET -> graceful Mac shutdown
+  app_settings.c/.h             settings.txt persistence (device name, shutdown listener options) + hostname default
+  shutdown_listener.c/.h        HTTP listener (shutdown_port), GET with the right key -> graceful Mac shutdown
   mdns.c/.h                     Bonjour/mDNS responder
 docker/                         cross-compile toolchain (Dockerfile, ppc-cc wrapper,
                                 make_app_bundle.sh, make_icns.sh)
