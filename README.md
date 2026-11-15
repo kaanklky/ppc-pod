@@ -102,7 +102,7 @@ The app runs one extra HTTP listener on TCP port 8990 (all interfaces). Any `GET
 curl http://<mac-ip>:8990/
 ```
 
-There is deliberately no authentication, token or path check: anyone who can reach port 8990 can shut the Mac down (a browser requesting `/favicon.ico` counts as a `GET` too). Only run this on a trusted network. If the port is already in use the listener logs `shutdown: failed to listen` to stderr and the rest of the app keeps working without it.
+There is deliberately no authentication, token or path check: anyone who can reach port 8990 can shut the Mac down (a browser requesting `/favicon.ico` counts as a `GET` too, which is why only the first `GET` in any 30 second window actually sends the shutdown event - later ones still get a `200` but are ignored, so one browser visit does not trigger two shutdown requests). Only run this on a trusted network. If the port is already in use the listener logs `shutdown: failed to listen` to stderr and the rest of the app keeps working without it.
 
 ## Building for Intel (x86_64, Mac OS X 10.9 Mavericks+)
 
