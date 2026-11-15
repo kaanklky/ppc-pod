@@ -4,12 +4,25 @@
 #include <stddef.h>
 
 /*
- * app_settings - persists the user-visible device name across restarts, in
- * a plain key=value text file. Deliberately just one field today
- * (device_name) - not a general preferences store.
+ * app_settings - persists the user-visible device name and the shutdown
+ * listener options across restarts, in a plain key=value text file.
+ * Deliberately a small fixed set of fields (device_name, shutdown_listener,
+ * shutdown_port, shutdown_key) - not a general preferences store.
  */
 
 #define APP_SETTINGS_DEVICE_NAME_MAX 256
+#define APP_SETTINGS_SHUTDOWN_KEY_MAX 128
+#define APP_SETTINGS_SHUTDOWN_PORT_DEFAULT 8990
+#define APP_SETTINGS_SHUTDOWN_KEY_DEFAULT "wololo"
+
+typedef struct {
+    char device_name[APP_SETTINGS_DEVICE_NAME_MAX];
+    int shutdown_listener;
+    int shutdown_port;
+    char shutdown_key[APP_SETTINGS_SHUTDOWN_KEY_MAX];
+} app_settings;
+
+void app_settings_defaults(app_settings *s);
 
 /* ~/Library/Application Support/PowerPC Pod/settings.txt */
 void app_settings_default_path(char *out, size_t out_cap);
@@ -19,15 +32,18 @@ void app_settings_default_path(char *out, size_t out_cap);
  * app_settings_read() below finds no settings file yet. */
 void app_settings_hostname_default(char *out, size_t out_cap);
 
-/* Returns 0 and fills device_name_out if the file exists and has a
- * device_name= line; returns -1 (device_name_out left untouched) if the
- * file doesn't exist yet or has no such line - callers should fall back to
- * a sensible default in that case, not treat it as a fatal error. */
-int app_settings_read(const char *path, char *device_name_out, size_t cap);
+/* Always fills `s` with the defaults first (shutdown_listener=off,
+ * shutdown_port=8990, shutdown_key=wololo, device_name empty), then
+ * overrides whatever the file at `path` actually sets - a missing line
+ * keeps its default, an explicit empty shutdown_key= stays empty. Returns
+ * 0 if the file exists, -1 if it doesn't (`s` still holds the defaults) -
+ * callers should treat that as normal first-launch state, not a fatal
+ * error. An empty device_name means none was saved - callers fall back to
+ * app_settings_hostname_default(). */
+int app_settings_read(const char *path, app_settings *s);
 
-/* Creates the parent directory if needed (matching ensure_parent_dir's
- * best-effort semantics). Returns 0 on success, -1 on failure to open the
- * file for writing. */
-int app_settings_write(const char *path, const char *device_name);
+int app_settings_ensure_defaults(const char *path);
+
+int app_settings_set_device_name(const char *path, const char *name);
 
 #endif

@@ -28,6 +28,7 @@ static void spawn_detached(void *(*fn)(void *), void *arg)
 int main(int argc, char **argv)
 {
     static char device_name[APP_SETTINGS_DEVICE_NAME_MAX];
+    static app_settings settings;
     char settings_path[1024];
 
     (void)argc;
@@ -38,7 +39,12 @@ int main(int argc, char **argv)
     signal(SIGPIPE, SIG_IGN);
 
     app_settings_default_path(settings_path, sizeof(settings_path));
-    if (app_settings_read(settings_path, device_name, sizeof(device_name)) != 0) {
+    if (app_settings_ensure_defaults(settings_path) != 0) {
+        fprintf(stderr, "settings: failed to add default keys to %s\n", settings_path);
+    }
+    app_settings_read(settings_path, &settings);
+    snprintf(device_name, sizeof(device_name), "%s", settings.device_name);
+    if (device_name[0] == '\0') {
         /* First launch, nothing saved yet - default to this Mac's real
          * hostname. cocoa_ui.m's buildUI independently does the same
          * read+fallback for the textbox's initial value, so both agree on
@@ -55,7 +61,11 @@ int main(int argc, char **argv)
      * read-at-startup is deliberately the only place the backend thread
      * learns the device name. */
     spawn_detached(airplay_backend_thread_main, device_name);
-    spawn_detached(shutdown_listener_thread_main, NULL);
+    if (settings.shutdown_listener) {
+        spawn_detached(shutdown_listener_thread_main, &settings);
+    } else {
+        fprintf(stderr, "shutdown: listener disabled (shutdown_listener=off)\n");
+    }
 
     /* No automatic Login Item registration - this app never adds itself to
      * a user's login items without being asked. If someone wants it to

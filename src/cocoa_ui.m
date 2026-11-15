@@ -201,9 +201,12 @@ static void PPCDrawFadeBand(NSRect rect, BOOL vertical, BOOL fadeFromMaxEdge)
     NSRect frame = NSMakeRect(120, 120, 260, 368);
     char settings_path[1024];
     char device_name[APP_SETTINGS_DEVICE_NAME_MAX];
+    app_settings saved;
 
     app_settings_default_path(settings_path, sizeof(settings_path));
-    if (app_settings_read(settings_path, device_name, sizeof(device_name)) != 0) {
+    app_settings_read(settings_path, &saved);
+    snprintf(device_name, sizeof(device_name), "%s", saved.device_name);
+    if (device_name[0] == '\0') {
         /* First launch, no settings.txt yet - default the device name to
          * this Mac's hostname. The user can edit and Save at any time;
          * app_settings_read above will then find the saved name on every
@@ -314,7 +317,7 @@ static void PPCDrawFadeBand(NSRect rect, BOOL vertical, BOOL fadeFromMaxEdge)
     /* Only treat the name as saved if the write genuinely succeeded; leave
      * Save enabled (and the on-screen device name unchanged) on failure so
      * a real problem stays visible instead of silently lying about it. */
-    if (app_settings_write(settings_path, [text UTF8String]) != 0) {
+    if (app_settings_set_device_name(settings_path, [text UTF8String]) != 0) {
         fprintf(stderr, "[cocoa_ui] failed to write settings to %s\n", settings_path);
         return;
     }

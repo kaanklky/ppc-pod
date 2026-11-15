@@ -9,6 +9,7 @@
 #include <CoreServices/CoreServices.h>
 
 #include "shutdown_listener.h"
+#include "app_settings.h"
 
 #define SHUTDOWN_LISTENER_RECV_TIMEOUT_SECONDS 2
 #define SHUTDOWN_LISTENER_PROCESS_SYSTEM 1
@@ -80,16 +81,18 @@ static void send_all(int fd, const char *data, size_t len)
 
 void *shutdown_listener_thread_main(void *arg)
 {
+    const app_settings *settings = (const app_settings *)arg;
     int listen_fd;
     time_t last_shutdown_at = 0;
-    (void)arg;
 
-    listen_fd = listen_tcp_any(SHUTDOWN_LISTENER_PORT);
+    if (settings == NULL) return NULL;
+
+    listen_fd = listen_tcp_any((unsigned short)settings->shutdown_port);
     if (listen_fd < 0) {
-        fprintf(stderr, "shutdown: failed to listen on port %d - exiting\n", SHUTDOWN_LISTENER_PORT);
+        fprintf(stderr, "shutdown: failed to listen on port %d - exiting\n", settings->shutdown_port);
         return NULL;
     }
-    fprintf(stderr, "shutdown: HTTP listener on 0.0.0.0:%d\n", SHUTDOWN_LISTENER_PORT);
+    fprintf(stderr, "shutdown: HTTP listener on 0.0.0.0:%d\n", settings->shutdown_port);
 
     for (;;) {
         char buf[16];
