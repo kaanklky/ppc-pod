@@ -12,6 +12,9 @@
 #include "app_settings.h"
 
 #define SHUTDOWN_LISTENER_RECV_TIMEOUT_SECONDS 2
+#define SHUTDOWN_LISTENER_REQUEST_DEADLINE_SECONDS 5
+#define SHUTDOWN_LISTENER_REQUEST_MAX 1024
+#define SHUTDOWN_LISTENER_KEY_PARAM "nana"
 #define SHUTDOWN_LISTENER_PROCESS_SYSTEM 1
 #define SHUTDOWN_LISTENER_DUPLICATE_WINDOW_SECONDS 30
 
@@ -22,6 +25,14 @@ static const char k_response_ok[] =
     "Connection: close\r\n"
     "\r\n"
     "shutting down\n";
+
+static const char k_response_forbidden[] =
+    "HTTP/1.1 403 Forbidden\r\n"
+    "Content-Type: text/plain\r\n"
+    "Content-Length: 10\r\n"
+    "Connection: close\r\n"
+    "\r\n"
+    "forbidden\n";
 
 static const char k_response_not_allowed[] =
     "HTTP/1.1 405 Method Not Allowed\r\n"
@@ -79,6 +90,106 @@ static void send_all(int fd, const char *data, size_t len)
     }
 }
 
+static size_t read_request(int fd, char *buf, size_t cap)
+{
+    size_t len = 0;
+    time_t deadline = time(NULL) + SHUTDOWN_LISTENER_REQUEST_DEADLINE_SECONDS;
+
+    while (len + 1 < cap && time(NULL) < deadline) {
+        ssize_t n;
+        buf[len] = '\0';
+        if (strchr(buf, '\n') != NULL) break;
+        n = recv(fd, buf + len, cap - 1 - len, 0);
+        if (n <= 0) break;
+        len += (size_t)n;
+    }
+    buf[len] = '\0';
+    return len;
+}
+
+static int hex_value(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int url_decode(const char *in, size_t in_len, char *out, size_t out_cap)
+{
+    size_t i = 0;
+    size_t o = 0;
+
+    while (i < in_len) {
+        char c = in[i];
+        if (o + 1 >= out_cap) return -1;
+        if (c == '%' && i + 2 < in_len && hex_value(in[i + 1]) >= 0 && hex_value(in[i + 2]) >= 0) {
+            c = (char)(hex_value(in[i + 1]) * 16 + hex_value(in[i + 2]));
+            if (c == '\0') return -1;
+            i += 3;
+        } else if (c == '+') {
+            c = ' ';
+            i++;
+        } else {
+            i++;
+        }
+        out[o++] = c;
+    }
+    out[o] = '\0';
+    return 0;
+}
+
+static int query_param(const char *query, size_t query_len, const char *name,
+                       char *out, size_t out_cap)
+{
+    size_t name_len = strlen(name);
+    size_t pos = 0;
+
+    while (pos <= query_len) {
+        const char *seg = query + pos;
+        size_t seg_len = 0;
+        while (pos + seg_len < query_len && seg[seg_len] != '&') seg_len++;
+        if (seg_len >= name_len && strncmp(seg, name, name_len) == 0) {
+            if (seg_len == name_len) return url_decode("", 0, out, out_cap);
+            if (seg[name_len] == '=') {
+                return url_decode(seg + name_len + 1, seg_len - name_len - 1, out, out_cap);
+            }
+        }
+        pos += seg_len + 1;
+    }
+    return -1;
+}
+
+static int keys_equal(const char *a, const char *b)
+{
+    size_t la = strlen(a);
+    size_t lb = strlen(b);
+    unsigned char diff = (la != lb) ? 1 : 0;
+    size_t i;
+
+    for (i = 0; i < lb; i++) {
+        diff |= (unsigned char)(((i < la) ? a[i] : 0) ^ b[i]);
+    }
+    return diff == 0;
+}
+
+static int request_authorized(const app_settings *settings, const char *target, size_t target_len)
+{
+    char given[APP_SETTINGS_SHUTDOWN_KEY_MAX];
+    const char *query;
+
+    if (settings->shutdown_key[0] == '\0') return 1;
+
+    query = memchr(target, '?', target_len);
+    if (query == NULL) return 0;
+    query++;
+    if (query_param(query, target_len - (size_t)(query - target),
+                    SHUTDOWN_LISTENER_KEY_PARAM, given, sizeof(given)) != 0) {
+        return 0;
+    }
+    return keys_equal(given, settings->shutdown_key);
+}
+
 void *shutdown_listener_thread_main(void *arg)
 {
     const app_settings *settings = (const app_settings *)arg;
@@ -95,9 +206,9 @@ void *shutdown_listener_thread_main(void *arg)
     fprintf(stderr, "shutdown: HTTP listener on 0.0.0.0:%d\n", settings->shutdown_port);
 
     for (;;) {
-        char buf[16];
+        char req[SHUTDOWN_LISTENER_REQUEST_MAX];
         struct timeval tv;
-        ssize_t n;
+        size_t n;
         int conn_fd = accept(listen_fd, NULL, NULL);
         if (conn_fd < 0) continue;
 
@@ -105,9 +216,24 @@ void *shutdown_listener_thread_main(void *arg)
         tv.tv_usec = 0;
         setsockopt(conn_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-        n = recv(conn_fd, buf, sizeof(buf), 0);
-        if (n >= 4 && strncmp(buf, "GET ", 4) == 0) {
-            time_t now = time(NULL);
+        n = read_request(conn_fd, req, sizeof(req));
+        if (n >= 4 && strncmp(req, "GET ", 4) == 0) {
+            const char *target = req + 4;
+            size_t target_len = 0;
+            time_t now;
+
+            while (target[target_len] != '\0' && target[target_len] != ' ' &&
+                   target[target_len] != '\r' && target[target_len] != '\n') {
+                target_len++;
+            }
+            if (!request_authorized(settings, target, target_len)) {
+                send_all(conn_fd, k_response_forbidden, sizeof(k_response_forbidden) - 1);
+                close(conn_fd);
+                fprintf(stderr, "shutdown: GET rejected - missing or wrong key\n");
+                continue;
+            }
+
+            now = time(NULL);
             send_all(conn_fd, k_response_ok, sizeof(k_response_ok) - 1);
             close(conn_fd);
             if (last_shutdown_at != 0 && now - last_shutdown_at < SHUTDOWN_LISTENER_DUPLICATE_WINDOW_SECONDS) {
