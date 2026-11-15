@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "receiver_entry.h"
+#include "shutdown_listener.h"
 #include "app_state.h"
 #include "app_settings.h"
 #include "cocoa_ui.h"
@@ -54,6 +55,7 @@ int main(int argc, char **argv)
      * read-at-startup is deliberately the only place the backend thread
      * learns the device name. */
     spawn_detached(airplay_backend_thread_main, device_name);
+    spawn_detached(shutdown_listener_thread_main, NULL);
 
     /* No automatic Login Item registration - this app never adds itself to
      * a user's login items without being asked. If someone wants it to
