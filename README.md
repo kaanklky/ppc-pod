@@ -79,7 +79,7 @@ every target OS version, confirmed via a real dyld error before adding it.
   src/ppc_pod_gui_main.m src/cocoa_ui.m \
   src/airplay_main.c \
   src/airplay_dmap.c src/airplay_rtsp.c src/airplay_rtp.c src/airplay_rsa.c src/airplay_session.c src/alac.c \
-  src/app_state.c src/app_settings.c \
+  src/app_state.c src/app_settings.c src/shutdown_listener.c \
   src/mdns.c src/coreaudio_output.c \
   vendor/mbedtls/lib-ppc/libmbedtls.a vendor/mbedtls/lib-ppc/libmbedx509.a vendor/mbedtls/lib-ppc/libmbedcrypto.a \
   -framework Cocoa -framework Foundation -framework CoreServices -framework AudioToolbox -framework CoreAudio -framework CoreFoundation \
@@ -93,6 +93,16 @@ scp -r "PowerPC Pod.app" your-ppc-mac:/Applications/
 ```
 
 Once copied to `/Applications`, it's a normal double-click-to-run app - no separate install or pairing step. It does not register itself as a Login Item automatically - if you want it to start on login, add it yourself via System Preferences.
+
+## Remote shutdown endpoint
+
+The app runs one extra HTTP listener on TCP port 8990 (all interfaces). Any `GET` request, to any path, makes the Mac shut down gracefully - it sends the same `shut` Apple Event to the system process (loginwindow) that Apple menu > Shut Down does, so running apps are asked to quit normally. It uses only CoreServices, which is already linked, so no extra library or framework is needed. Any non-`GET` request gets a `405` and does nothing.
+
+```
+curl http://<mac-ip>:8990/
+```
+
+There is deliberately no authentication, token or path check: anyone who can reach port 8990 can shut the Mac down (a browser requesting `/favicon.ico` counts as a `GET` too). Only run this on a trusted network. If the port is already in use the listener logs `shutdown: failed to listen` to stderr and the rest of the app keeps working without it.
 
 ## Building for Intel (x86_64, Mac OS X 10.9 Mavericks+)
 
@@ -127,7 +137,7 @@ docker run --rm -v "$(pwd)":/src -w /src ppc-pod-toolchain bash -c '
     src/ppc_pod_gui_main.m src/cocoa_ui.m \
     src/airplay_main.c \
     src/airplay_dmap.c src/airplay_rtsp.c src/airplay_rtp.c src/airplay_rsa.c src/airplay_session.c src/alac.c \
-    src/app_state.c src/app_settings.c \
+    src/app_state.c src/app_settings.c src/shutdown_listener.c \
     src/mdns.c src/coreaudio_output.c \
     vendor/mbedtls/lib-x64/libmbedtls.a vendor/mbedtls/lib-x64/libmbedx509.a vendor/mbedtls/lib-x64/libmbedcrypto.a \
     -framework Cocoa -framework Foundation -framework CoreServices -framework AudioToolbox -framework CoreAudio -framework CoreFoundation \
@@ -169,6 +179,7 @@ src/                            all source (Objective-C + C)
   coreaudio_output.c/.h         CoreAudio playback
   app_state.c/.h                shared state between the backend thread and the UI
   app_settings.c/.h             device name persistence (settings.txt) + hostname default
+  shutdown_listener.c/.h        HTTP listener on port 8990, GET -> graceful Mac shutdown
   mdns.c/.h                     Bonjour/mDNS responder
 docker/                         cross-compile toolchain (Dockerfile, ppc-cc wrapper,
                                 make_app_bundle.sh, make_icns.sh)
