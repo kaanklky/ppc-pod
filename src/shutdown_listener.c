@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -11,6 +12,7 @@
 
 #define SHUTDOWN_LISTENER_RECV_TIMEOUT_SECONDS 2
 #define SHUTDOWN_LISTENER_PROCESS_SYSTEM 1
+#define SHUTDOWN_LISTENER_DUPLICATE_WINDOW_SECONDS 30
 
 static const char k_response_ok[] =
     "HTTP/1.1 200 OK\r\n"
@@ -79,6 +81,7 @@ static void send_all(int fd, const char *data, size_t len)
 void *shutdown_listener_thread_main(void *arg)
 {
     int listen_fd;
+    time_t last_shutdown_at = 0;
     (void)arg;
 
     listen_fd = listen_tcp_any(SHUTDOWN_LISTENER_PORT);
@@ -101,8 +104,14 @@ void *shutdown_listener_thread_main(void *arg)
 
         n = recv(conn_fd, buf, sizeof(buf), 0);
         if (n >= 4 && strncmp(buf, "GET ", 4) == 0) {
+            time_t now = time(NULL);
             send_all(conn_fd, k_response_ok, sizeof(k_response_ok) - 1);
             close(conn_fd);
+            if (last_shutdown_at != 0 && now - last_shutdown_at < SHUTDOWN_LISTENER_DUPLICATE_WINDOW_SECONDS) {
+                fprintf(stderr, "shutdown: GET received - shutdown already requested, ignoring\n");
+                continue;
+            }
+            last_shutdown_at = now;
             fprintf(stderr, "shutdown: GET received - requesting system shutdown\n");
             if (request_system_shutdown() != 0) {
                 fprintf(stderr, "shutdown: failed to send shutdown Apple Event\n");
